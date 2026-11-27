@@ -3,6 +3,9 @@ import pandas as pd
 import joblib
 import mlflow
 import mlflow.sklearn
+import os
+from mlflow.models import infer_signature
+from mlflow.tracking import MlflowClient
 
 from pathlib import Path
 from sklearn.model_selection import train_test_split
@@ -57,9 +60,10 @@ print("Confusion Matrix:")
 print(confusion_matrix(y_test, y_pred))
 
 # Configure MLflow
-mlflow.set_tracking_uri("sqlite:///mlflow.db")
-mlflow.set_registry_uri("sqlite:///mlflow.db")
+TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
+MODEL_NAME = "GermanCreditModel"
 
+mlflow.set_tracking_uri(TRACKING_URI)
 mlflow.set_experiment("German Credit Experiment")
 
 # Log experiment and register model
@@ -76,17 +80,22 @@ with mlflow.start_run(run_name="Logistic Regression"):
     mlflow.log_metrics(metrics)
 
     # Log saved model file as an artifact
-    mlflow.log_artifact(
-        str("model.joblib"),
-        artifact_path="saved_model"
-    )
+    mlflow.log_artifact("model.joblib", artifact_path="saved_model")
 
-    # Log and register model
+    # Log and register model (a new version is created on every run)
+    signature = infer_signature(X_train, model.predict(X_train))
     mlflow.sklearn.log_model(
         sk_model=model,
         artifact_path="model",
-        registered_model_name="GermanCreditModel"
+        signature=signature,
+        input_example=X_train.head(3),
+        registered_model_name=MODEL_NAME,
     )
 
+# Point the "champion" alias at the newest version so the API knows what to serve
+client = MlflowClient()
+latest = max(int(v.version) for v in client.search_model_versions(f"name='{MODEL_NAME}'"))
+client.set_registered_model_alias(MODEL_NAME, "champion", str(latest))
+
 print("\nMLflow tracking completed!")
-print("Model registered as GermanCreditModel")
+print(f"Model registered as {MODEL_NAME} v{latest} (alias: champion)")

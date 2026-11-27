@@ -10,6 +10,8 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
+import os
+import mlflow.sklearn
 
 import joblib
 import pandas as pd
@@ -31,7 +33,24 @@ BASE_DIR = Path(__file__).resolve().parent
 MODEL_PATH = BASE_DIR / "model.joblib"
 DATA_PATH = BASE_DIR / "german.data"
 
-model = joblib.load(MODEL_PATH)
+MODEL_NAME = os.getenv("MODEL_NAME", "GermanCreditModel")
+MODEL_ALIAS = os.getenv("MODEL_ALIAS", "champion")
+MLFLOW_URI = os.getenv("MLFLOW_TRACKING_URI")
+
+
+def load_model():
+    """Prefer the MLflow registry, fall back to the local joblib file."""
+    if MLFLOW_URI:
+        try:
+            mlflow.set_tracking_uri(MLFLOW_URI)
+            loaded = mlflow.sklearn.load_model(f"models:/{MODEL_NAME}@{MODEL_ALIAS}")
+            return loaded, f"mlflow:{MODEL_NAME}@{MODEL_ALIAS}"
+        except Exception as error:
+            print(f"MLflow load failed ({error}); falling back to model.joblib")
+    return joblib.load(MODEL_PATH), "file:model.joblib"
+
+
+model, model_source = load_model()
 
 app = FastAPI(
     title="German Credit ML API",
