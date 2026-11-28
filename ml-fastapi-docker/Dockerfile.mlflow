@@ -1,3 +1,4 @@
 FROM python:3.11-slim
-RUN pip install --no-cache-dir mlflow==2.22.0
+RUN pip install --no-cache-dir "mlflow==2.22.0" "sqlalchemy>=2.0.38,<2.1" \
+    && mkdir -p /mlflow/artifacts
 EXPOSE 5000
